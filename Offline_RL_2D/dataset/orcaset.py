@@ -8,8 +8,8 @@ class ORCADataset(torch.utils.data.Dataset):
     def __init__(self, args):
         self.args=args
 
-        train_file = '/home/gpuadmin/work/CEP-energy-guided-diffusion/Offline_RL_2D/data/train/train.pkl'
-        # train_file = '/home/gpuadmin/work/CEP-energy-guided-diffusion/Offline_RL_2D/data/test/val.pkl'
+        train_file = '/home/gpuadmin/work/CEP-energy-guided-diffusion/Offline_RL_2D/data/train_fake.pkl'
+        # train_file = '/home/gpuadmin/work/CEP-energy-guided-diffusion/Offline_RL_2D/data/val_fake.pkl'
         train_obs = torch.load(train_file)
         total_len = 0
         for episode in train_obs:
@@ -46,6 +46,9 @@ class ORCADataset(torch.utils.data.Dataset):
                     next_states.append(np.concatenate((last_pos, target, last_latent)))
 
                 is_finished[-1] = True
+
+            if len(states) > 500000:
+                break
 
         self.device = args.device
         self.states = torch.from_numpy(np.array(states)).float().to(self.device)
