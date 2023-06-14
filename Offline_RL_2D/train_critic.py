@@ -27,7 +27,7 @@ from vae import VanillaVAE
 LOAD_FAKE=False
 WIDTH = 10
 HEIGHT = 10
-RADIUS = 0.1
+RADIUS = 0.18
 VIS_RANGE = 2
 
 def train_critic(args, score_model, data_loader, start_epoch=0):
