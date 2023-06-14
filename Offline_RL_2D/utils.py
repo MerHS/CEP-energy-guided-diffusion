@@ -6,7 +6,7 @@ from tensorboard.backend.event_processing import event_accumulator
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="halfcheetah-medium-expert-v2") # OpenAI gym environment name
+    parser.add_argument("--env", default="walker2d-medium-expert-v2") # OpenAI gym environment name
     parser.add_argument("--seed", default=0, type=int)             # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--expid", default="default", type=str)    # 
     parser.add_argument("--device", default="cuda", type=str)      #
