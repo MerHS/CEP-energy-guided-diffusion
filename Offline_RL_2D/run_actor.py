@@ -13,8 +13,13 @@ from vae import VanillaVAE
 from diffusion_SDE.model import ScoreNet
 from diffusion_SDE.schedule import marginal_prob_std
 
-VAL_SIZE = 100
-TRAIN_SIZE = 3000
+SCENARIO = None
+# SCENARIO = 'circle'
+GUIDANCE = 1.0
+NAGENT = 10
+SEED = 0
+ACTOR_PATH = '/Users/kinetc/work/Python-RVO2/behavior_ckpt300.pth'
+CRITIC_PATH = '/Users/kinetc/work/Python-RVO2/critic_ckpt15.pth'
 
 WIDTH = 10
 HEIGHT = 10
@@ -43,8 +48,10 @@ def gauss(len, mu, sigma):
 gauss_200 = gauss(200, 0, 0.05)
 gauss_100 = gauss_200[50:150, 50:150]
 
+random.seed(SEED)
+
 class TestEnv():
-    def __init__(self, vae_path, n_agents, device):
+    def __init__(self, vae_path, n_agents, device, scenario=None):
         vae_weight = torch.load(vae_path, map_location='cpu')
         self.vae_model = VanillaVAE(1, 24)
         self.vae_model.load_state_dict({k.replace('model.', ''): v for k, v in vae_weight['state_dict'].items()})
@@ -54,7 +61,50 @@ class TestEnv():
         self.device = device
         self.n_agents = n_agents
 
+        self.scenario = scenario
+
         self.reset()
+
+    def reset(self):
+        self.pos = []
+        self.vel = []
+        self.target = []
+        self.done = []
+        self.latent = []
+
+        for i in range(self.n_agents):
+            if self.scenario == 'circle':
+                pos = np.array([WIDTH / 2 + WIDTH / 3 * np.cos(i * 2 * np.pi / self.n_agents), HEIGHT / 2 + HEIGHT / 3 * np.sin(i * 2 * np.pi / self.n_agents)])
+                target = np.array([WIDTH / 2 + WIDTH / 3 * np.cos((i * 2 * np.pi) / self.n_agents + np.pi), HEIGHT / 2 + HEIGHT / 3 * np.sin((i * 2 * np.pi) / self.n_agents + np.pi)])
+            else:
+                target_done = True
+                while target_done:
+                    target_done = False
+
+                    pos = np.array([random.uniform(1, WIDTH - 1), random.uniform(1, HEIGHT - 1)])
+                    target = np.array([WIDTH - pos[0] + random.uniform(-1, 1), HEIGHT - pos[1] + random.uniform(-1, 1)])
+
+                    for curr_pos in self.pos:
+                        if np.linalg.norm(pos - curr_pos) < 2 * RADIUS:
+                            target_done = True
+                            break
+                    
+                    for curr_target in self.target:
+                        if np.linalg.norm(target - curr_target) < 2 * RADIUS:
+                            target_done = True
+                            break
+
+            vel = target - pos
+            vel = vel / (np.linalg.norm(vel) + 1e-6)
+
+            self.pos.append(pos)
+            self.vel.append(vel)
+            self.target.append(target)
+            self.done.append(False)
+
+        self.gen_latent()
+
+        self.rewards = [0 for _ in range(self.n_agents)]
 
     def gen_latent(self):
         latent_all = []
@@ -77,14 +127,14 @@ class TestEnv():
                 # print(plane[pos_x - 50:pos_x + 50, pos_y - 50:pos_y + 50].shape, pos, pos_x, pos_y)
                 plane[pos_x - 50:pos_x + 50, pos_y - 50:pos_y + 50] = np.maximum(plane[pos_x - 50:pos_x + 50, pos_y - 50:pos_y + 50], gauss_100)
 
-        for pos in self.pos:
-            pos_x = int((pos[0] + VIS_RANGE) / VIS_RANGE * 100)
-            pos_y = int((pos[1] + VIS_RANGE) / VIS_RANGE * 100)
+        # for pos in self.pos:
+        #     pos_x = int((pos[0] + VIS_RANGE) / VIS_RANGE * 100)
+        #     pos_y = int((pos[1] + VIS_RANGE) / VIS_RANGE * 100)
 
-            pos_x = int(np.clip(pos_x, 100, plane_w - 100))
-            pos_y = int(np.clip(pos_y, 100, plane_h - 100))
-            # print(plane[pos_x - 50:pos_x + 50, pos_y - 50:pos_y + 50].shape, pos, pos_x, pos_y)
-            plane[pos_x - 50:pos_x + 50, pos_y - 50:pos_y + 50] = np.maximum(plane[pos_x - 50:pos_x + 50, pos_y - 50:pos_y + 50], gauss_100)
+        #     pos_x = int(np.clip(pos_x, 100, plane_w - 100))
+        #     pos_y = int(np.clip(pos_y, 100, plane_h - 100))
+        #     # print(plane[pos_x - 50:pos_x + 50, pos_y - 50:pos_y + 50].shape, pos, pos_x, pos_y)
+        #     plane[pos_x - 50:pos_x + 50, pos_y - 50:pos_y + 50] = np.maximum(plane[pos_x - 50:pos_x + 50, pos_y - 50:pos_y + 50], gauss_100)
     
         for i, pos in enumerate(self.pos):
             pos_x = int((pos[0] + VIS_RANGE) / VIS_RANGE * 100)
@@ -110,43 +160,6 @@ class TestEnv():
                 states.append(np.concatenate([pos, target, latent]))
         
         return states
-
-    def reset(self):
-        self.pos = []
-        self.vel = []
-        self.target = []
-        self.done = []
-        self.latent = []
-
-        for i in range(self.n_agents):
-            target_done = True
-            while target_done:
-                target_done = False
-
-                pos = np.array([random.uniform(1, WIDTH - 1), random.uniform(1, HEIGHT - 1)])
-                target = np.array([WIDTH - pos[0] + random.uniform(-1, 1), HEIGHT - pos[1] + random.uniform(-1, 1)])
-
-                for curr_pos in self.pos:
-                    if np.linalg.norm(pos - curr_pos) < 2 * RADIUS:
-                        target_done = True
-                        break
-                
-                for curr_target in self.target:
-                    if np.linalg.norm(target - curr_target) < 2 * RADIUS:
-                        target_done = True
-                        break
-
-            vel = target - pos
-            vel = vel / (np.linalg.norm(vel) + 1e-6)
-
-            self.pos.append(pos)
-            self.vel.append(vel)
-            self.target.append(target)
-            self.done.append(False)
-
-        self.gen_latent()
-
-        self.rewards = [0 for _ in range(self.n_agents)]
 
     def step(self, actions):
         orig_pos_list = []
@@ -194,8 +207,9 @@ class TestEnv():
 
 def main(args):
     # TODO:
-    actor_path = '/Users/kinetc/work/CEP-energy-guided-diffusion/Offline_RL_2D/behavior_ckpt500.pth'
+    actor_path = ACTOR_PATH
     vae_path = '/Users/kinetc/work/CEP-energy-guided-diffusion/Offline_RL_2D/last.ckpt'
+    critic_path = CRITIC_PATH
 
     actor_weight = torch.load(actor_path, map_location='cpu')[0]
     actor_weight = {k.replace("module.", ""): v for k, v in actor_weight.items()}
@@ -203,9 +217,14 @@ def main(args):
 
     score_model = ScoreNet(input_dim=2 + 2 + 24 + 2, output_dim=2, marginal_prob_std=marginal_prob_std_fn, args=args).to(args.device)
     score_model.load_state_dict(actor_weight)
-    score_model.q[0].guidance_scale = 0.0
 
-    env = TestEnv(vae_path, 10, args.device)
+    critic_weight = torch.load(critic_path, map_location='cpu')
+    critic_weight = {k.replace("module.", ""): v for k, v in critic_weight.items()}
+    score_model.q[0].load_state_dict(critic_weight)
+
+    score_model.q[0].guidance_scale = GUIDANCE
+
+    env = TestEnv(vae_path, NAGENT, args.device, scenario=SCENARIO)
     env.reset()
 
     pygame.init()
