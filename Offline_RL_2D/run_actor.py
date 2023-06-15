@@ -15,11 +15,13 @@ from diffusion_SDE.schedule import marginal_prob_std
 
 SCENARIO = None
 # SCENARIO = 'circle'
-GUIDANCE = 1.0
-NAGENT = 10
-SEED = 0
-ACTOR_PATH = '/Users/kinetc/work/Python-RVO2/behavior_ckpt300.pth'
-CRITIC_PATH = '/Users/kinetc/work/Python-RVO2/critic_ckpt15.pth'
+# SCENARIO = 'hallway'
+GUIDANCE = 3.5
+NAGENT = 12
+SEED = 3
+# ACTOR_PATH = '/Users/kinetc/work/Python-RVO2/behavior_ckpt120.pth'
+ACTOR_PATH = './behavior_ckpt300.pth'
+CRITIC_PATH = './critic_ckpt85.pth'
 
 WIDTH = 10
 HEIGHT = 10
@@ -48,8 +50,6 @@ def gauss(len, mu, sigma):
 gauss_200 = gauss(200, 0, 0.05)
 gauss_100 = gauss_200[50:150, 50:150]
 
-random.seed(SEED)
-
 class TestEnv():
     def __init__(self, vae_path, n_agents, device, scenario=None):
         vae_weight = torch.load(vae_path, map_location='cpu')
@@ -76,6 +76,28 @@ class TestEnv():
             if self.scenario == 'circle':
                 pos = np.array([WIDTH / 2 + WIDTH / 3 * np.cos(i * 2 * np.pi / self.n_agents), HEIGHT / 2 + HEIGHT / 3 * np.sin(i * 2 * np.pi / self.n_agents)])
                 target = np.array([WIDTH / 2 + WIDTH / 3 * np.cos((i * 2 * np.pi) / self.n_agents + np.pi), HEIGHT / 2 + HEIGHT / 3 * np.sin((i * 2 * np.pi) / self.n_agents + np.pi)])
+            elif self.scenario == 'hallway':
+                target_done = True
+                while target_done:
+                    target_done = False
+
+                    if random.random() < 0.5:
+                        pos = np.array([random.uniform(3, HEIGHT - 3), random.uniform(1, 3)])
+                        target = np.array([pos[0] + random.uniform(-2, 2), random.uniform(6, 8)])
+                    else:
+                        pos = np.array([random.uniform(3, HEIGHT - 3), random.uniform(6, 8)])
+                        target = np.array([pos[0] + random.uniform(-2, 2), random.uniform(1, 3)])
+
+
+                    for curr_pos in self.pos:
+                        if np.linalg.norm(pos - curr_pos) < 2 * RADIUS:
+                            target_done = True
+                            break
+                    
+                    for curr_target in self.target:
+                        if np.linalg.norm(target - curr_target) < 2 * RADIUS:
+                            target_done = True
+                            break
             else:
                 target_done = True
                 while target_done:
@@ -206,9 +228,14 @@ class TestEnv():
     
 
 def main(args):
-    # TODO:
+    GUIDANCE = args.guidance
+    NAGENT = args.n_agent
+    SEED = args.seed
+
+    random.seed(SEED)
+
     actor_path = ACTOR_PATH
-    vae_path = '/Users/kinetc/work/CEP-energy-guided-diffusion/Offline_RL_2D/last.ckpt'
+    vae_path = './vae.ckpt'
     critic_path = CRITIC_PATH
 
     actor_weight = torch.load(actor_path, map_location='cpu')[0]
@@ -269,11 +296,15 @@ def main(args):
             _, reward, done = env.step(actions)
         
         # with torch.no_grad():
-        #     Z = model.decode(torch.tensor(last_latent).unsqueeze(0).float()).reshape(64, 64, 1).numpy()
+        #     lat = env.latent[0]
+        #     Z = env.vae_model.decode(torch.tensor(lat).unsqueeze(0).float()).reshape(64, 64).numpy()
+        #     Z = cv2.resize(Z, (128, 128), interpolation=cv2.INTER_NEAREST).reshape(128, 128, 1)
         #     Z = np.repeat(Z * 255, 3, axis=2)
 
         # surf = pygame.surfarray.make_surface(Z)
         # screen.blit(surf, (0, 0))
+
+        # pygame.draw.rect(screen, pygame.Color(255, 255, 255), pygame.Rect(0, 0, 128, 128), 1)
 
         for pos, vel, target, color in zip(env.pos, env.vel, env.target, itertools.cycle(colors)):
             pos = np.array(pos) * 10

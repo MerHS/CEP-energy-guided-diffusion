@@ -7,6 +7,10 @@ import torch
 
 def get_args():
     parser = argparse.ArgumentParser()
+
+    parser.add_argument("--guidance", default=1.0, type=float)
+    parser.add_argument("--n_agent", default=12, type=int)
+
     parser.add_argument("--env", default="walker2d-medium-expert-v2") # OpenAI gym environment name
     parser.add_argument("--seed", default=0, type=int)             # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--expid", default="default", type=str)    # 
